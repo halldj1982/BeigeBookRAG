@@ -67,15 +67,22 @@ git push -u origin main
 6. **Branch**: Choose `main` (or your default branch)
 7. **Configuration**: Choose "Use a configuration file" (apprunner.yaml)
 8. **Service name**: `beigebook-rag-app`
-9. **Environment variables**: Add the following:
+9. Click "Next" through the remaining steps and "Create & deploy"
+
+#### 4. Configure Environment Variables (After Service Creation)
+1. Go to your App Runner service in the AWS console
+2. Click on the "Configuration" tab
+3. In the "Environment variables" section, click "Edit"
+4. Add the following environment variables:
    - `OPENSEARCH_ENDPOINT`: `https://your-opensearch-endpoint`
    - `OPENSEARCH_INDEX`: `beigebook-docs`
    - `CLAUDE_MODEL`: `amazon.nova-premier-v1:0`
    - `BEDROCK_EMBEDDING_MODEL`: `amazon.titan-embed-text-v2:0`
    - `EMBED_DIM`: `1024`
    - `S3_BUCKET`: `your-s3-bucket-name`
+5. Click "Save changes" - this will trigger a new deployment
 
-#### 4. Alternative: Create Service via CLI
+#### 5. Alternative: Create Service via CLI
 ```bash
 # Create service configuration JSON
 cat > apprunner-service.json << EOF
@@ -105,16 +112,16 @@ EOF
 aws apprunner create-service --cli-input-json file://apprunner-service.json --region us-west-2
 ```
 
-#### 5. Configure IAM Role
+#### 6. Configure IAM Role
 Create an IAM role for App Runner with permissions for:
 - Amazon Bedrock (InvokeModel)
 - OpenSearch (es:*)
 - S3 (GetObject, PutObject)
 
-#### 6. Update OpenSearch Access Policy
+#### 7. Update OpenSearch Access Policy
 Add App Runner's IP ranges to your OpenSearch `allowed_cidr` or use IAM-based authentication.
 
-#### 7. Monitor Deployment
+#### 8. Monitor Deployment
 ```bash
 # Check service status
 aws apprunner describe-service --service-arn <service-arn> --region us-west-2
