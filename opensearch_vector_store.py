@@ -144,6 +144,14 @@ class OpenSearchVectorStore:
                         "source": {"type": "keyword"},
                         "page": {"type": "integer"},
                         "embedding": {"type": "knn_vector", "dimension": self.embed_dim},
+                        "publication_date": {"type": "keyword"},
+                        "district": {"type": "keyword"},
+                        "district_number": {"type": "integer"},
+                        "section_type": {"type": "keyword"},
+                        "topic": {"type": "keyword"},
+                        "chunk_index": {"type": "integer"},
+                        "heading": {"type": "text"},
+                        "word_count": {"type": "integer"},
                     }
                 },
             }
@@ -156,9 +164,9 @@ class OpenSearchVectorStore:
                 print(f"[OpenSearchVectorStore] Failed to create index: {e}", file=sys.stderr)
                 raise
 
-    def index_document(self, doc_id: str, text: str, embedding: List[float], source: str = None, page: int = None):
+    def index_document(self, doc_id: str, text: str, embedding: List[float], metadata: Dict[str, Any] = None):
         """
-        Index a document chunk with a precomputed embedding (list of floats).
+        Index a document chunk with a precomputed embedding and metadata.
         """
         # Validate embedding
         if not embedding or not isinstance(embedding, list) or len(embedding) == 0:
@@ -166,12 +174,21 @@ class OpenSearchVectorStore:
         
         if len(embedding) != self.embed_dim:
             raise ValueError(f"Embedding dimension mismatch: got {len(embedding)}, expected {self.embed_dim}")
-            
+        
+        metadata = metadata or {}
         body = {
             "text": text,
             "embedding": embedding,
-            "source": source or "unknown",
-            "page": page or 0,
+            "source": metadata.get("source", "unknown"),
+            "page": metadata.get("page", 0),
+            "publication_date": metadata.get("publication_date"),
+            "district": metadata.get("district"),
+            "district_number": metadata.get("district_number"),
+            "section_type": metadata.get("section_type"),
+            "topic": metadata.get("topic"),
+            "chunk_index": metadata.get("chunk_index"),
+            "heading": metadata.get("heading"),
+            "word_count": metadata.get("word_count"),
         }
         
         # Check for dimension mismatch and recreate index if needed
@@ -264,4 +281,17 @@ class OpenSearchVectorStore:
                 )
 
         raise ValueError("Unsupported query type for search(); supply a list of floats (embedding) or a query string.")
+    
+    def delete_index(self):
+        """
+        Delete the entire index to wipe the knowledge base.
+        """
+        try:
+            self.client.indices.delete(index=self.index_name)
+            print(f"[OpenSearchVectorStore] Deleted index '{self.index_name}'", file=sys.stderr)
+            # Recreate the index with updated schema
+            self._ensure_index()
+        except Exception as e:
+            print(f"[OpenSearchVectorStore] Error deleting index: {e}", file=sys.stderr)
+            raise
 
