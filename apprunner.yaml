@@ -10,7 +10,7 @@ build:
       - echo "Build finished"
 
 run:
-  runtime-version: python-3.11
+  runtime-version: 3.11
   
   pre-run:
     - echo "pre-run (no-op for now)"
