@@ -44,16 +44,6 @@ if st.button("Ask") and query.strip():
             rag_resp = rag.answer(query=query, top_k=top_k, rerank_threshold=rerank_threshold, history=st.session_state.history)
             rag_answer = rag_resp['answer']
         st.markdown(rag_answer)
-        
-        # Show retrieved context
-        with st.expander("📖 Retrieved Context"):
-            meta = rag_resp.get('meta', {})
-            if 'retrieved_docs' in meta:
-                for i, doc in enumerate(meta['retrieved_docs'][:3]):
-                    st.write(f"**Source {i+1}:** {doc.get('source', 'Unknown')} (Page {doc.get('page', 'N/A')})")
-                    st.write(f"*Score: {doc.get('score', 'N/A')}*")
-                    st.write(doc.get('text', '')[:200] + "...")
-                    st.divider()
     
     # Store both responses in history
     st.session_state.history.append({"role":"user","content":query})

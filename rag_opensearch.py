@@ -23,8 +23,19 @@ class RAGOpenSearch:
             last_hits = hits
             avg_sim = sum(h['score'] for h in hits)/len(hits) if hits else 0.0
             st.session_state['last_meta'] = {'round':round_num, 'num_hits':len(hits), 'avg_score':avg_sim}
-            # assemble context
-            context = "\n\n".join([f"Source {i+1} ({h.get('source','unknown')}): {h['text'][:2000]}" for i,h in enumerate(hits)])
+            # assemble context with enhanced metadata
+            context_parts = []
+            for i, h in enumerate(hits):
+                meta_info = []
+                if h.get('district'):
+                    meta_info.append(f"District: {h['district']}")
+                if h.get('topic'):
+                    meta_info.append(f"Topic: {h['topic']}")
+                if h.get('publication_date'):
+                    meta_info.append(f"Date: {h['publication_date']}")
+                meta_str = " | ".join(meta_info) if meta_info else h.get('source', 'unknown')
+                context_parts.append(f"[{i+1}] {meta_str}\n{h['text'][:2000]}")
+            context = "\n\n".join(context_parts)
             prompt = self._build_prompt(query, context, history)
             llm_resp = self.bedrock.generate(prompt=prompt, model=self.claude_model)
             answer = llm_resp.get('output') or llm_resp.get('answer') or str(llm_resp)
@@ -51,9 +62,15 @@ class RAGOpenSearch:
 
     def _build_prompt(self, user_query: str, context_text: str, history: List[Dict[str,str]]) -> str:
         system = (
-            "You are a kind, professional assistant specialized in the Federal Reserve Beige Books. "
-            "Primary focus: community development. Cite sources when possible, using the provided context."
+            "You are a professional assistant specialized in the Federal Reserve Beige Books. "
+            "Primary focus: community development and economic analysis.\n\n"
+            "IMPORTANT INSTRUCTIONS:\n"
+            "- Use the provided context sources which include metadata (District, Topic, Date)\n"
+            "- When citing information, use numbered references like [1], [2], etc.\n"
+            "- At the end of your response, include a 'References:' section listing each source\n"
+            "- Format references as: [1] District Name - Topic (Date)\n"
+            "- Be concise and professional. If context is insufficient, say so."
         )
         convo = "\n".join([f"{h['role']}: {h['content']}" for h in (history or [])])
-        prompt = f"{system}\nConversation:\n{convo}\n\nUser question:\n{user_query}\n\nContext:\n{context_text}\n\nAnswer succinctly and professionally. If context is insufficient, say so and ask clarifying questions."
+        prompt = f"{system}\n\nConversation:\n{convo}\n\nUser question:\n{user_query}\n\nContext Sources:\n{context_text}\n\nProvide your answer with numbered citations and a References section at the end."
         return prompt

@@ -45,7 +45,7 @@ class BeigeBookParser:
     
     def _detect_topic(self, text: str) -> str:
         for topic in self.TOPICS:
-            if topic in text[:100]:
+            if topic in text[:500]:
                 return topic
         return None
     
@@ -116,12 +116,14 @@ class BeigeBookParser:
             # Combine paragraphs into chunks
             current_chunk = []
             current_words = 0
+            current_topic = self._detect_topic(heading or '')
             
             for para in paragraphs:
                 para_words = len(para.split())
                 
-                # Detect topic from paragraph
-                topic = self._detect_topic(para)
+                # Detect topic from paragraph if not already set
+                if not current_topic:
+                    current_topic = self._detect_topic(para)
                 
                 if current_words + para_words > chunk_size and current_chunk:
                     # Save current chunk
@@ -135,7 +137,7 @@ class BeigeBookParser:
                         'section_type': section_type,
                         'district': district,
                         'district_number': district_number,
-                        'topic': topic,
+                        'topic': current_topic,
                         'heading': heading,
                         'word_count': len(chunk_text.split()),
                         'publication_date': self.publication_date,
@@ -144,6 +146,7 @@ class BeigeBookParser:
                     chunk_index += 1
                     current_chunk = [para]
                     current_words = para_words
+                    current_topic = self._detect_topic(para)
                 else:
                     current_chunk.append(para)
                     current_words += para_words
@@ -160,7 +163,7 @@ class BeigeBookParser:
                     'section_type': section_type,
                     'district': district,
                     'district_number': district_number,
-                    'topic': topic,
+                    'topic': current_topic,
                     'heading': heading,
                     'word_count': len(chunk_text.split()),
                     'publication_date': self.publication_date,

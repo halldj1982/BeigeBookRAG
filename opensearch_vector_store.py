@@ -142,7 +142,6 @@ class OpenSearchVectorStore:
                     "properties": {
                         "text": {"type": "text"},
                         "source": {"type": "keyword"},
-                        "page": {"type": "integer"},
                         "embedding": {"type": "knn_vector", "dimension": self.embed_dim},
                         "publication_date": {"type": "keyword"},
                         "district": {"type": "keyword"},
@@ -180,7 +179,6 @@ class OpenSearchVectorStore:
             "text": text,
             "embedding": embedding,
             "source": metadata.get("source", "unknown"),
-            "page": metadata.get("page", 0),
             "publication_date": metadata.get("publication_date"),
             "district": metadata.get("district"),
             "district_number": metadata.get("district_number"),
