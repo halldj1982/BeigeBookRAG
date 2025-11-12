@@ -9,12 +9,7 @@ cfg = load_config()
 
 @st.cache_resource
 def get_vector_store():
-    return OpenSearchVectorStore(
-        endpoint=cfg["opensearch_endpoint"],
-        index_name=cfg["opensearch_index"],
-        region=cfg["aws_region"],
-        embedding_dim=cfg["embed_dim"]
-    )
+    return OpenSearchVectorStore(cfg)
 
 vector_store = get_vector_store()
 
