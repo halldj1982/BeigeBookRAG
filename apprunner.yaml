@@ -1,49 +1,32 @@
 version: 1.0
+runtime: python3
 
-# For Python 3.11 use python311 (not "python3")
-runtime: python311
-
-# Build commands (revised App Runner build uses pre-run / build / post-build)
 build:
   commands:
-    pre-build:
-      # any setup required before building (optional)
-      - echo "Pre-build step"
     build:
-      # NOTE: For python311 use pip3 and python3
       - echo "Installing dependencies"
       - pip3 install -r requirements.txt
     post-build:
       - echo "Build finished"
 
 run:
-  # runtime-version is the minor version number for the Python managed runtime
-  runtime-version: "3.11"
-
-  # pre-run commands run inside the final image environment before starting the app.
-  # For Python 3.11 some installs must be done here to persist in /app (per docs).
+  runtime-version: python-3.11
+  
   pre-run:
     - echo "pre-run (no-op for now)"
 
-  # start command - use python3 and respect the App Runner provided $PORT
-  # use $PORT; App Runner injects PORT env var
   command: python3 -m streamlit run app.py --server.port=$PORT --server.address=0.0.0.0
 
-  # network config: App Runner will set the $PORT environment variable for you,
-  # but we still show mapping here for clarity
   network:
-    port: 8501    # optional; App Runner maps $PORT at runtime — keep if you want a fixed inside port
-    env: PORT
+    port: 8501
 
-  # env variables available at runtime
   env:
     - name: AWS_DEFAULT_REGION
       value: "us-west-2"
     - name: PORT
-      value: "8501"   # optional — App Runner sets an actual dynamic PORT env automatically; you can override if desired
+      value: "8501"
 
   # (optional) secrets you may reference (example)
   # secrets:
   #   - name: my-secret
   #     value-from: "arn:aws:secretsmanager:us-west-2:123456789012:secret:mysecret"
-
