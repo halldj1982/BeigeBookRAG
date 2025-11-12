@@ -61,6 +61,7 @@ def load_config():
         except Exception:
             pass
     cfg["opensearch_index"] = cfg.get("opensearch_index", "beigebook-docs")
+    cfg["aws_region"] = cfg.get("aws_region", "us-west-2")
     cfg["max_rounds"] = int(cfg.get("max_rounds", 3))
     cfg["chunk_size"] = int(cfg.get("chunk_size", 800))
 
