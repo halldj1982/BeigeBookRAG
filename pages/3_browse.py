@@ -20,10 +20,10 @@ st.write("Filter documents by metadata:")
 col1, col2, col3 = st.columns(3)
 
 with col1:
-    requested_beigebook = st.text_input("Beige Book (YYYYMM)", placeholder="202510", help="Format: YYYYMM (e.g., 202510 for October 2025)")
+    requested_beigebook = st.text_input("Beige Book (YYYYMM)", placeholder="202510,202509", help="Format: YYYYMM. Use commas for multiple (e.g., 202510,202509)")
 
 with col2:
-    district = st.text_input("District", placeholder="Atlanta", help="Federal Reserve district name")
+    district = st.text_input("District", placeholder="Atlanta,Boston", help="Federal Reserve district name. Use commas for multiple")
 
 with col3:
     section_type = st.selectbox("Section Type", ["All", "national_summary", "district_report", "about"])
@@ -38,21 +38,26 @@ if st.button("🔍 Search Documents", type="primary"):
         print(f"[Browse] Filter inputs - beigebook: {requested_beigebook}, district: {district}, section_type: {section_type}", file=sys.stderr)
         
         if requested_beigebook:
-            # Extract YYYYMM from source filename
-            filter_clause = {
-                "wildcard": {
-                    "source": f"*{requested_beigebook}*"
-                }
-            }
+            bb_values = [bb.strip() for bb in requested_beigebook.split(',')]
+            if len(bb_values) > 1:
+                # Multiple Beige Books - use OR logic
+                should_clauses = [{"wildcard": {"source": f"*{bb}*"}} for bb in bb_values]
+                filter_clause = {"bool": {"should": should_clauses, "minimum_should_match": 1}}
+            else:
+                # Single Beige Book
+                filter_clause = {"wildcard": {"source": f"*{bb_values[0]}*"}}
             must_filters.append(filter_clause)
             print(f"[Browse] Added beigebook filter: {filter_clause}", file=sys.stderr)
         
         if district:
-            filter_clause = {
-                "term": {
-                    "district": district
-                }
-            }
+            district_values = [d.strip() for d in district.split(',')]
+            if len(district_values) > 1:
+                # Multiple districts - use OR logic
+                should_clauses = [{"term": {"district": d}} for d in district_values]
+                filter_clause = {"bool": {"should": should_clauses, "minimum_should_match": 1}}
+            else:
+                # Single district
+                filter_clause = {"term": {"district": district_values[0]}}
             must_filters.append(filter_clause)
             print(f"[Browse] Added district filter: {filter_clause}", file=sys.stderr)
         
