@@ -2,6 +2,7 @@ import streamlit as st
 from utils import load_config
 from opensearch_vector_store import OpenSearchVectorStore
 import re
+import sys
 
 st.set_page_config(page_title="BeigeBot Browse", page_icon="🤖")
 st.title("🤖 BeigeBot Knowledge Base Browser")
@@ -34,27 +35,35 @@ if st.button("🔍 Search Documents", type="primary"):
         # Build query with filters
         must_filters = []
         
+        print(f"[Browse] Filter inputs - beigebook: {requested_beigebook}, district: {district}, section_type: {section_type}", file=sys.stderr)
+        
         if requested_beigebook:
             # Extract YYYYMM from source filename
-            must_filters.append({
+            filter_clause = {
                 "wildcard": {
                     "source": f"*{requested_beigebook}*"
                 }
-            })
+            }
+            must_filters.append(filter_clause)
+            print(f"[Browse] Added beigebook filter: {filter_clause}", file=sys.stderr)
         
         if district:
-            must_filters.append({
+            filter_clause = {
                 "term": {
                     "district": district
                 }
-            })
+            }
+            must_filters.append(filter_clause)
+            print(f"[Browse] Added district filter: {filter_clause}", file=sys.stderr)
         
         if section_type and section_type != "All":
-            must_filters.append({
+            filter_clause = {
                 "term": {
                     "section_type": section_type
                 }
-            })
+            }
+            must_filters.append(filter_clause)
+            print(f"[Browse] Added section_type filter: {filter_clause}", file=sys.stderr)
         
         query_body = {
             "size": max_results,
@@ -66,6 +75,8 @@ if st.button("🔍 Search Documents", type="primary"):
             "_source": {"excludes": ["embedding"]}
         }
         
+        print(f"[Browse] Final query body: {query_body}", file=sys.stderr)
+        
         results = vector_store.client.search(
             index=cfg["opensearch_index"],
             body=query_body
@@ -73,6 +84,14 @@ if st.button("🔍 Search Documents", type="primary"):
         
         total = results['hits']['total']['value']
         hits = results['hits']['hits']
+        
+        print(f"[Browse] Query returned {total} total documents, showing {len(hits)} hits", file=sys.stderr)
+        
+        # Log first few results for debugging
+        if hits:
+            for i, hit in enumerate(hits[:3]):
+                src = hit['_source']
+                print(f"[Browse] Sample hit {i+1}: source={src.get('source')}, district={src.get('district')}, section={src.get('section_type')}", file=sys.stderr)
         
         if total == 0:
             st.warning("No documents found matching the filters.")

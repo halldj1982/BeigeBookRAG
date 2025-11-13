@@ -5,6 +5,7 @@ from typing import List, Dict, Any
 import time
 import re
 import json
+import sys
 
 class RAGOpenSearch:
     def __init__(self, config: Dict[str, Any]):
@@ -33,14 +34,19 @@ User Query: {query}
 
 Return ONLY valid JSON with these fields. Do NOT extract topic."""
         
+        print(f"[RAG] Analyzing query: {query}", file=sys.stderr)
+        
         try:
             response = self.bedrock.generate(prompt=prompt, model=self.claude_model)
             result_text = response.get('output', '{}')
             # Extract JSON from response
             json_match = re.search(r'\{[^}]+\}', result_text, re.DOTALL)
             if json_match:
-                return json.loads(json_match.group(0))
+                metadata = json.loads(json_match.group(0))
+                print(f"[RAG] Extracted metadata: {metadata}", file=sys.stderr)
+                return metadata
         except Exception as e:
+            print(f"[RAG] Query analysis failed: {e}", file=sys.stderr)
             st.warning(f"Query analysis failed: {e}")
         
         return {
@@ -56,20 +62,30 @@ Return ONLY valid JSON with these fields. Do NOT extract topic."""
         requested_bb = metadata.get('requested_beigebook')
         requested_district = metadata.get('district')
         
+        print(f"[RAG] Filtering {len(chunks)} chunks with metadata: bb={requested_bb}, district={requested_district}", file=sys.stderr)
+        
         for chunk in chunks:
             # Filter by Beige Book date (YYYYMM from filename)
             if requested_bb:
                 chunk_yyyymm = self._extract_yyyymm_from_source(chunk.get('source', ''))
                 if not chunk_yyyymm or chunk_yyyymm != requested_bb:
+                    print(f"[RAG] Filtered out chunk: source={chunk.get('source')}, extracted_yyyymm={chunk_yyyymm}, requested={requested_bb}", file=sys.stderr)
                     continue
             
             # Filter by district
             if requested_district:
                 chunk_district = chunk.get('district')
                 if not chunk_district or chunk_district != requested_district:
+                    print(f"[RAG] Filtered out chunk: district={chunk_district}, requested={requested_district}", file=sys.stderr)
                     continue
             
             filtered.append(chunk)
+        
+        print(f"[RAG] After filtering: {len(filtered)} chunks remaining", file=sys.stderr)
+        
+        # Log sample of filtered chunks
+        for i, chunk in enumerate(filtered[:3]):
+            print(f"[RAG] Kept chunk {i+1}: source={chunk.get('source')}, district={chunk.get('district')}, section={chunk.get('section_type')}", file=sys.stderr)
         
         return filtered
     
@@ -137,7 +153,9 @@ Return ONLY valid JSON:
             round_num += 1
             
             # Vector search with improved query
+            print(f"[RAG] Round {round_num}: Searching with query='{improved_query}', top_k={top_k}", file=sys.stderr)
             hits = self.vs.search(improved_query, top_k=top_k)
+            print(f"[RAG] Vector search returned {len(hits)} hits", file=sys.stderr)
             
             # Filter by metadata
             filtered_hits = self._filter_chunks_by_metadata(hits, query_metadata)
