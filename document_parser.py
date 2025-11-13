@@ -54,6 +54,7 @@ class BeigeBookParser:
         lines = self.text.split('\n')
         current_section = []
         current_heading = None
+        skip_section = False
         
         for line in lines:
             stripped = line.strip()
@@ -62,19 +63,27 @@ class BeigeBookParser:
             is_district_header = any(f"Federal Reserve Bank of {d}" in stripped for d in self.DISTRICTS.keys())
             is_national_summary = "National Summary" in stripped
             is_about = "About This Publication" in stripped
+            is_contents = "Contents" in stripped and len(stripped) < 20
             
-            if is_district_header or is_national_summary or is_about:
-                if current_section:
+            if is_district_header or is_national_summary or is_about or is_contents:
+                # Save previous section if not skipped
+                if current_section and not skip_section:
                     sections.append({
                         'heading': current_heading,
                         'text': '\n'.join(current_section)
                     })
+                
+                # Start new section
                 current_section = [line]
                 current_heading = stripped
+                
+                # Mark low-value sections to skip
+                skip_section = is_about or is_contents
             else:
                 current_section.append(line)
         
-        if current_section:
+        # Save final section if not skipped
+        if current_section and not skip_section:
             sections.append({
                 'heading': current_heading,
                 'text': '\n'.join(current_section)

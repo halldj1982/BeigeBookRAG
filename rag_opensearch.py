@@ -220,8 +220,23 @@ Valid recommendation values: sufficient, expand_search, insufficient"""
             }
             
             # Assemble context with consistent reference format
+            chunks_to_send = filtered_hits[:10]
+            print(f"[RAG] Assembling context from {len(filtered_hits)} chunks (limiting to {len(chunks_to_send)} for LLM)", file=sys.stderr)
+            
+            # Count chunks by date
+            date_counts = {}
+            for h in chunks_to_send:
+                yyyymm = self._extract_yyyymm_from_source(h.get('source', ''))
+                if yyyymm:
+                    date_counts[yyyymm] = date_counts.get(yyyymm, 0) + 1
+            
+            if date_counts:
+                date_breakdown = ", ".join([f"{count} from {yyyymm}" for yyyymm, count in sorted(date_counts.items())])
+                print(f"[RAG] Context breakdown: {date_breakdown}", file=sys.stderr)
+            
             context_parts = []
-            for i, h in enumerate(filtered_hits[:10]):
+            print(f"[RAG] Context chunks:", file=sys.stderr)
+            for i, h in enumerate(chunks_to_send):
                 # Extract YYYYMM from source filename
                 source = h.get('source', 'unknown')
                 yyyymm = self._extract_yyyymm_from_source(source)
@@ -243,6 +258,7 @@ Valid recommendation values: sufficient, expand_search, insufficient"""
                     ref_parts.append(h['section_type'].replace('_', ' ').title())
                 
                 ref_str = " - ".join(ref_parts)
+                print(f"[RAG]   [{i+1}] {ref_str} (score: {h.get('score', 0):.2f})", file=sys.stderr)
                 context_parts.append(f"[{i+1}] {ref_str}\n{h['text'][:2000]}")
             context = "\n\n".join(context_parts)
             
@@ -251,6 +267,36 @@ Valid recommendation values: sufficient, expand_search, insufficient"""
             llm_resp = self.bedrock.generate(prompt=prompt, model=self.claude_model)
             answer = llm_resp.get('output') or llm_resp.get('answer') or str(llm_resp)
             last_answer = answer
+            
+            # Analyze citations in answer
+            citations = re.findall(r'\[(\d+)\]', answer)
+            unique_citations = sorted(set(int(c) for c in citations))
+            print(f"[RAG] LLM generated answer with {len(unique_citations)} unique citations: {unique_citations}", file=sys.stderr)
+            
+            # Analyze which dates were cited
+            if unique_citations:
+                cited_dates = {}
+                for cite_num in unique_citations:
+                    if cite_num <= len(chunks_to_send):
+                        chunk = chunks_to_send[cite_num - 1]
+                        yyyymm = self._extract_yyyymm_from_source(chunk.get('source', ''))
+                        if yyyymm:
+                            cited_dates[yyyymm] = cited_dates.get(yyyymm, 0) + 1
+                
+                if cited_dates:
+                    cited_breakdown = ", ".join([f"{count} from {yyyymm}" for yyyymm, count in sorted(cited_dates.items())])
+                    print(f"[RAG] Citations breakdown: {cited_breakdown}", file=sys.stderr)
+                    
+                    # Warning for imbalanced results
+                    requested_bb = query_metadata.get('requested_beigebook')
+                    if requested_bb and ',' in str(requested_bb):
+                        requested_dates = [bb.strip() for bb in requested_bb.split(',')]
+                        missing_dates = [d for d in requested_dates if d not in cited_dates]
+                        if missing_dates:
+                            print(f"[RAG] WARNING: User requested {requested_bb} but {','.join(missing_dates)} not cited in answer", file=sys.stderr)
+                
+                unused_count = len(chunks_to_send) - len(unique_citations)
+                print(f"[RAG] Unused chunks: {unused_count} of {len(chunks_to_send)} sent to LLM", file=sys.stderr)
             
             # Check if confidence meets threshold
             if confidence >= rerank_threshold:
@@ -262,6 +308,7 @@ Valid recommendation values: sufficient, expand_search, insufficient"""
                 continue
         
         # Final answer with low confidence indicator
+        print(f"[RAG] Answer generation complete: retrieved={len(last_hits)}, sent_to_llm={min(len(last_hits), 10)}, confidence={final_confidence:.2f}", file=sys.stderr)
         return {'answer': last_answer, 'sources': last_hits, 'meta': st.session_state.get('last_meta', {})}
 
     def _build_prompt(self, user_query: str, context_text: str, history: List[Dict[str,str]], confidence: float = 1.0) -> str:
