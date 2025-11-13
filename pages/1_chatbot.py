@@ -2,9 +2,9 @@ import streamlit as st
 from rag_opensearch import RAGOpenSearch
 from utils import load_config
 
-st.set_page_config(page_title="BeigeBook Chatbot", layout="wide")
-st.title("BeigeBook Assistant — Chatbot")
-st.write("Compare responses with and without RAG context. Powered by Amazon Nova Premier via Bedrock and OpenSearch vector store.")
+st.set_page_config(page_title="BeigeBot Chat", page_icon="🤖", layout="wide")
+st.title("🤖 BeigeBot Chat")
+st.write("Your Personal Beige Book Assistant - Compare responses with and without RAG context.")
 
 config = load_config()
 rag = RAGOpenSearch(config)
@@ -25,12 +25,12 @@ with st.sidebar:
             del st.session_state['last_meta']
         st.rerun()
 
-query = st.text_input("Ask about the Beige Book (community development examples encouraged)")
+query = st.text_input("Ask BeigeBot about the Beige Book")
 if st.button("Ask") and query.strip():
     col1, col2 = st.columns(2)
     
     with col1:
-        st.subheader("🤖 Standard Response (No RAG)")
+        st.subheader("💬 Standard Response (No RAG)")
         with st.spinner("Generating standard response..."):
             # Get standard response without RAG
             standard_resp = rag.bedrock.generate(prompt=query)

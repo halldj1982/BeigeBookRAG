@@ -1,19 +1,19 @@
 import streamlit as st
 
 st.set_page_config(
-    page_title="BeigeBook RAG — Home",
-    page_icon="📊",
+    page_title="BeigeBot — Home",
+    page_icon="🤖",
     layout="wide",
 )
 
-st.title("📊 BeigeBook RAG Assistant")
-st.subheader("Powered by Amazon Nova Premier + OpenSearch k-NN Vector Search")
+st.title("🤖 BeigeBot")
+st.subheader("Your Personal Beige Book Assistant")
 
-st.write("### Welcome to the Federal Reserve Beige Book RAG System")
+st.write("### Welcome to BeigeBot")
 
 st.write(
-    "This application uses Retrieval-Augmented Generation (RAG) to answer questions about Federal Reserve Beige Books "
-    "with intelligent document chunking, metadata extraction, and semantic search."
+    "BeigeBot uses Retrieval-Augmented Generation (RAG) to answer your questions about Federal Reserve Beige Books "
+    "with intelligent document chunking, metadata extraction, and semantic search powered by Amazon Bedrock and OpenSearch."
 )
 
 st.write("---")

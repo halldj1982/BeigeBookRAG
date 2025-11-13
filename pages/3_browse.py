@@ -2,8 +2,8 @@ import streamlit as st
 from utils import load_config
 from opensearch_vector_store import OpenSearchVectorStore
 
-st.set_page_config(page_title="Browse Documents", page_icon="📚")
-st.title("📚 Browse Vector Database")
+st.set_page_config(page_title="BeigeBot Browse", page_icon="🤖")
+st.title("🤖 BeigeBot Knowledge Base Browser")
 
 cfg = load_config()
 

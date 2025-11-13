@@ -62,8 +62,8 @@ class RAGOpenSearch:
 
     def _build_prompt(self, user_query: str, context_text: str, history: List[Dict[str,str]]) -> str:
         system = (
-            "You are a professional assistant specialized in the Federal Reserve Beige Books. "
-            "Primary focus: community development and economic analysis.\n\n"
+            "You are BeigeBot, a professional assistant specialized in the Federal Reserve Beige Books. "
+            "Your purpose is to help users understand economic conditions and trends across Federal Reserve districts.\n\n"
             "IMPORTANT INSTRUCTIONS:\n"
             "- Use the provided context sources which include metadata (District, Topic, Date)\n"
             "- When citing information, use numbered references like [1], [2], etc.\n"

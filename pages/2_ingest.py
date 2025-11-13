@@ -3,8 +3,8 @@ from ingest import Ingestor
 from utils import load_config
 import tempfile
 
-st.set_page_config(page_title="Ingest Documents", layout="wide")
-st.title("Upload & Ingest Beige Book Documents")
+st.set_page_config(page_title="BeigeBot Ingest", page_icon="🤖", layout="wide")
+st.title("🤖 BeigeBot Document Ingestion")
 
 config = load_config()
 ingestor = Ingestor(config)
@@ -38,4 +38,4 @@ if uploaded:
             except Exception as e:
                 st.error(f"Error processing {up.name}: {e}")
 
-st.markdown("Make sure OpenSearch endpoint and Bedrock embedding model are configured in secrets.")
+st.markdown("Upload documents to expand BeigeBot's knowledge base.")
