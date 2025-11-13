@@ -8,16 +8,10 @@ st.set_page_config(
 
 st.title("🤖 BeigeBot")
 st.subheader("Your Personal Beige Book Assistant")
-
-st.write("### Welcome to BeigeBot")
-
 st.write(
     "BeigeBot uses Retrieval-Augmented Generation (RAG) to answer your questions about Federal Reserve Beige Books "
     "with intelligent document chunking, metadata extraction, and semantic search powered by Amazon Bedrock and OpenSearch."
 )
-
-st.write("---")
-
 st.write("### 📑 Available Pages")
 
 st.write(
@@ -37,9 +31,6 @@ st.write(
     "**3. Browse** — View random samples from the vector database to inspect stored documents and their metadata. "
     "Useful for verifying ingestion quality and exploring the knowledge base structure."
 )
-
-st.write("---")
-
 st.write("### 🏗️ Technology Stack")
 
 st.write(
