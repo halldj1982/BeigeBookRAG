@@ -217,8 +217,17 @@ class OpenSearchVectorStore:
         # Build query with optional filters
         if filters:
             filter_clauses = []
+            
+            # Handle single source filter
             if filters.get('source'):
                 filter_clauses.append({"wildcard": {"source": filters['source']}})
+            
+            # Handle multiple sources (OR logic)
+            if filters.get('source_multi'):
+                source_list = filters['source_multi']
+                should_clauses = [{"wildcard": {"source": f"*{bb}*"}} for bb in source_list]
+                filter_clauses.append({"bool": {"should": should_clauses, "minimum_should_match": 1}})
+            
             if filters.get('district'):
                 filter_clauses.append({"term": {"district": filters['district']}})
             if filters.get('section_type'):

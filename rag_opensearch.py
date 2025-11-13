@@ -25,10 +25,12 @@ class RAGOpenSearch:
     def _analyze_query(self, query: str) -> Dict[str, Any]:
         """Use LLM to analyze query and extract metadata"""
         prompt = f"""Analyze this user query about Federal Reserve Beige Books and extract:
-1. improved_query: Rewritten query optimized for vector search
-2. requested_beigebook: Specific Beige Book edition in YYYYMM format (e.g., "September 2025" → "202509", null if not specified)
+1. improved_query: Rewrite to add context and improve semantic search, but PRESERVE any specific dates, districts, or sections mentioned
+2. requested_beigebook: Specific Beige Book edition in YYYYMM format (e.g., "September 2025" → "202509"). If multiple years/months mentioned, use comma-separated list (e.g., "202509,202510")
 3. district: Specific Federal Reserve district (e.g., "Atlanta", "San Francisco", null if not specified)
 4. section_type: Type of section ("national_summary", "district_report", null if not specified)
+
+IMPORTANT: Do NOT change or remove any dates, districts, or sections from the original query. Only add clarifying context.
 
 User Query: {query}
 
@@ -185,8 +187,14 @@ Valid recommendation values: sufficient, expand_search, insufficient"""
             
             # Build filters for pre-filtering
             search_filters = {}
-            if query_metadata.get('requested_beigebook'):
-                search_filters['source'] = f"*{query_metadata['requested_beigebook']}*"
+            requested_bb = query_metadata.get('requested_beigebook')
+            if requested_bb:
+                # Handle multiple Beige Books (comma-separated)
+                if ',' in str(requested_bb):
+                    bb_list = [bb.strip() for bb in requested_bb.split(',')]
+                    search_filters['source_multi'] = bb_list  # Special key for multiple
+                else:
+                    search_filters['source'] = f"*{requested_bb}*"
             if query_metadata.get('district'):
                 search_filters['district'] = query_metadata['district']
             
@@ -211,16 +219,31 @@ Valid recommendation values: sufficient, expand_search, insufficient"""
                 'metadata': query_metadata
             }
             
-            # Assemble context
+            # Assemble context with consistent reference format
             context_parts = []
             for i, h in enumerate(filtered_hits[:10]):
-                meta_info = []
+                # Extract YYYYMM from source filename
+                source = h.get('source', 'unknown')
+                yyyymm = self._extract_yyyymm_from_source(source)
+                
+                # Format: Beige Book (Month YYYY) - District - Section
+                ref_parts = []
+                if yyyymm:
+                    month_year = f"{yyyymm[4:6]}/{yyyymm[:4]}"  # MM/YYYY
+                    ref_parts.append(f"Beige Book ({month_year})")
+                else:
+                    ref_parts.append("Beige Book")
+                
                 if h.get('district'):
-                    meta_info.append(f"District: {h['district']}")
-                if h.get('section_type'):
-                    meta_info.append(f"Section: {h['section_type']}")
-                meta_str = " | ".join(meta_info) if meta_info else h.get('source', 'unknown')
-                context_parts.append(f"[{i+1}] {meta_str}\n{h['text'][:2000]}")
+                    ref_parts.append(h['district'])
+                
+                if h.get('heading'):
+                    ref_parts.append(h['heading'])
+                elif h.get('section_type'):
+                    ref_parts.append(h['section_type'].replace('_', ' ').title())
+                
+                ref_str = " - ".join(ref_parts)
+                context_parts.append(f"[{i+1}] {ref_str}\n{h['text'][:2000]}")
             context = "\n\n".join(context_parts)
             
             # Generate answer with confidence level
@@ -260,10 +283,10 @@ Valid recommendation values: sufficient, expand_search, insufficient"""
             "You are BeigeBot, a professional assistant specialized in the Federal Reserve Beige Books. "
             "Your purpose is to help users understand economic conditions and trends across Federal Reserve districts.\n\n"
             "IMPORTANT INSTRUCTIONS:\n"
-            "- Use the provided context sources which include metadata (District, Section)\n"
+            "- Use the provided context sources which include metadata (Beige Book date, District, Section)\n"
             "- When citing information, use numbered references like [1], [2], etc.\n"
             "- At the end of your response, include a 'References:' section listing each source\n"
-            "- Format references as: [1] District Name - Section Type\n"
+            "- Format references as: [1] Beige Book (MM/YYYY) - District - Section\n"
             "- Be concise and professional."
             f"{low_confidence_instruction}"
         )
