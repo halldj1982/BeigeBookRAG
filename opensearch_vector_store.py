@@ -209,23 +209,49 @@ class OpenSearchVectorStore:
             st.error(f"Embedding type: {type(embedding)}, length: {len(embedding) if embedding else 'None'}")
             raise
 
-    def search_with_embedding(self, embedding: List[float], top_k: int = 5) -> List[Dict[str, Any]]:
+    def search_with_embedding(self, embedding: List[float], top_k: int = 5, filters: Dict[str, Any] = None) -> List[Dict[str, Any]]:
         """
-        Perform k-NN search using an embedding vector.
-        Returns list of hits with keys: id, score, text, source, page
+        Perform k-NN search using an embedding vector with optional pre-filtering.
+        Returns list of hits with keys: id, score, text, source, district, section_type, etc.
         """
-        # OpenSearch knn query body (works on OpenSearch 2.x)
-        body = {
-            "size": top_k,
-            "query": {
-                "knn": {
-                    "embedding": {
-                        "vector": embedding,
-                        "k": top_k,
+        # Build query with optional filters
+        if filters:
+            filter_clauses = []
+            if filters.get('source'):
+                filter_clauses.append({"wildcard": {"source": filters['source']}})
+            if filters.get('district'):
+                filter_clauses.append({"term": {"district": filters['district']}})
+            if filters.get('section_type'):
+                filter_clauses.append({"term": {"section_type": filters['section_type']}})
+            
+            body = {
+                "size": top_k,
+                "query": {
+                    "bool": {
+                        "must": {
+                            "knn": {
+                                "embedding": {
+                                    "vector": embedding,
+                                    "k": top_k,
+                                }
+                            }
+                        },
+                        "filter": filter_clauses
                     }
                 }
             }
-        }
+        else:
+            body = {
+                "size": top_k,
+                "query": {
+                    "knn": {
+                        "embedding": {
+                            "vector": embedding,
+                            "k": top_k,
+                        }
+                    }
+                }
+            }
         try:
             res = self.client.search(index=self.index_name, body=body)
         except Exception as e:
@@ -242,12 +268,15 @@ class OpenSearchVectorStore:
                     "score": score,
                     "text": src.get("text", ""),
                     "source": src.get("source", "unknown"),
-                    "page": src.get("page", None),
+                    "district": src.get("district"),
+                    "section_type": src.get("section_type"),
+                    "topic": src.get("topic"),
+                    "heading": src.get("heading"),
                 }
             )
         return hits
 
-    def search(self, query: Any, top_k: int = 5) -> List[Dict[str, Any]]:
+    def search(self, query: Any, top_k: int = 5, filters: Dict[str, Any] = None) -> List[Dict[str, Any]]:
         """
         Search API that accepts either:
           - an embedding (list of floats) -> calls search_with_embedding
@@ -257,7 +286,7 @@ class OpenSearchVectorStore:
         """
         # If query already looks like an embedding vector (list/tuple), pass through
         if isinstance(query, (list, tuple)):
-            return self.search_with_embedding(list(query), top_k=top_k)
+            return self.search_with_embedding(list(query), top_k=top_k, filters=filters)
 
         # If it's a string, try to embed it using BedrockClient if present
         if isinstance(query, str):
@@ -268,7 +297,7 @@ class OpenSearchVectorStore:
                     embedding = emb_resp.get("embedding")
                     if not embedding:
                         raise RuntimeError("BedrockClient.embed did not return 'embedding' key")
-                    return self.search_with_embedding(embedding, top_k=top_k)
+                    return self.search_with_embedding(embedding, top_k=top_k, filters=filters)
                 except Exception as e:
                     print(f"[OpenSearchVectorStore] failed to embed query via BedrockClient: {e}", file=sys.stderr)
                     raise

@@ -183,13 +183,18 @@ Valid recommendation values: sufficient, expand_search, insufficient"""
         while round_num < self.max_rounds:
             round_num += 1
             
-            # Vector search with improved query
-            print(f"[RAG] Round {round_num}: Searching with query='{improved_query}', top_k={top_k}", file=sys.stderr)
-            hits = self.vs.search(improved_query, top_k=top_k)
-            print(f"[RAG] Vector search returned {len(hits)} hits", file=sys.stderr)
+            # Build filters for pre-filtering
+            search_filters = {}
+            if query_metadata.get('requested_beigebook'):
+                search_filters['source'] = f"*{query_metadata['requested_beigebook']}*"
+            if query_metadata.get('district'):
+                search_filters['district'] = query_metadata['district']
             
-            # Filter by metadata
-            filtered_hits = self._filter_chunks_by_metadata(hits, query_metadata)
+            print(f"[RAG] Round {round_num}: Searching with query='{improved_query}', top_k={top_k}, filters={search_filters}", file=sys.stderr)
+            
+            # Vector search with pre-filtering
+            filtered_hits = self.vs.search(improved_query, top_k=top_k, filters=search_filters if search_filters else None)
+            print(f"[RAG] Vector search with pre-filtering returned {len(filtered_hits)} hits", file=sys.stderr)
             
             # LLM-based relevance scoring
             relevance_result = self._score_relevance(original_query, improved_query, filtered_hits, query_metadata)
@@ -199,8 +204,9 @@ Valid recommendation values: sufficient, expand_search, insufficient"""
             last_hits = filtered_hits
             st.session_state['last_meta'] = {
                 'round': round_num,
-                'num_hits': len(hits),
-                'filtered_hits': len(filtered_hits),
+                'num_hits': len(filtered_hits),
+                'pre_filtered': bool(search_filters),
+                'filters_applied': search_filters,
                 'confidence': confidence,
                 'metadata': query_metadata
             }
