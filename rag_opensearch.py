@@ -185,32 +185,41 @@ Valid recommendation values: sufficient, expand_search, insufficient"""
         while round_num < self.max_rounds:
             round_num += 1
             
-            # Build filters for pre-filtering
-            search_filters = {}
-            requested_bb = query_metadata.get('requested_beigebook')
-            if requested_bb:
-                # Handle multiple Beige Books (comma-separated)
-                if ',' in str(requested_bb):
-                    bb_list = [bb.strip() for bb in requested_bb.split(',')]
-                    search_filters['source_multi'] = bb_list  # Special key for multiple
-                else:
-                    search_filters['source'] = f"*{requested_bb}*"
-            if query_metadata.get('district'):
-                search_filters['district'] = query_metadata['district']
+            # Show status to user
+            status_msg = f"🔍 Round {round_num}/{self.max_rounds}: "
+            if round_num == 1:
+                status_msg += "Analyzing query and searching..."
+            else:
+                status_msg += f"Expanding search (retrieving {top_k} chunks)..."
             
-            print(f"[RAG] Round {round_num}: Searching with query='{improved_query}', top_k={top_k}, filters={search_filters}", file=sys.stderr)
+            with st.spinner(status_msg):
+                # Build filters for pre-filtering
+                search_filters = {}
+                requested_bb = query_metadata.get('requested_beigebook')
+                if requested_bb:
+                    # Handle multiple Beige Books (comma-separated)
+                    if ',' in str(requested_bb):
+                        bb_list = [bb.strip() for bb in requested_bb.split(',')]
+                        search_filters['source_multi'] = bb_list  # Special key for multiple
+                    else:
+                        search_filters['source'] = f"*{requested_bb}*"
+                if query_metadata.get('district'):
+                    search_filters['district'] = query_metadata['district']
+                
+                print(f"[RAG] Round {round_num}: Searching with query='{improved_query}', top_k={top_k}, filters={search_filters}", file=sys.stderr)
+                
+                # Vector search with pre-filtering
+                filtered_hits = self.vs.search(improved_query, top_k=top_k, filters=search_filters if search_filters else None)
+                print(f"[RAG] Vector search with pre-filtering returned {len(filtered_hits)} hits", file=sys.stderr)
             
-            # Vector search with pre-filtering
-            filtered_hits = self.vs.search(improved_query, top_k=top_k, filters=search_filters if search_filters else None)
-            print(f"[RAG] Vector search with pre-filtering returned {len(filtered_hits)} hits", file=sys.stderr)
+                # LLM-based relevance scoring
+                st.spinner(f"📊 Evaluating relevance of {len(filtered_hits)} chunks...")
+                relevance_result = self._score_relevance(original_query, improved_query, filtered_hits, query_metadata)
+                confidence = relevance_result.get('overall_confidence', 0.0)
+                final_confidence = confidence
             
-            # LLM-based relevance scoring
-            relevance_result = self._score_relevance(original_query, improved_query, filtered_hits, query_metadata)
-            confidence = relevance_result.get('overall_confidence', 0.0)
-            final_confidence = confidence
-            
-            last_hits = filtered_hits
-            st.session_state['last_meta'] = {
+                last_hits = filtered_hits
+                st.session_state['last_meta'] = {
                 'round': round_num,
                 'num_hits': len(filtered_hits),
                 'pre_filtered': bool(search_filters),
@@ -219,8 +228,9 @@ Valid recommendation values: sufficient, expand_search, insufficient"""
                 'metadata': query_metadata
             }
             
-            # Assemble context with consistent reference format
-            chunks_to_send = filtered_hits[:10]
+                # Assemble context with consistent reference format
+                st.spinner(f"✍️ Generating answer from {min(len(filtered_hits), 10)} sources...")
+                chunks_to_send = filtered_hits[:10]
             print(f"[RAG] Assembling context from {len(filtered_hits)} chunks (limiting to {len(chunks_to_send)} for LLM)", file=sys.stderr)
             
             # Count chunks by date
@@ -262,14 +272,14 @@ Valid recommendation values: sufficient, expand_search, insufficient"""
                 context_parts.append(f"[{i+1}] {ref_str}\n{h['text'][:2000]}")
             context = "\n\n".join(context_parts)
             
-            # Generate answer with confidence level
-            prompt = self._build_prompt(original_query, context, history, confidence)
-            llm_resp = self.bedrock.generate(prompt=prompt, model=self.claude_model)
-            answer = llm_resp.get('output') or llm_resp.get('answer') or str(llm_resp)
-            last_answer = answer
+                # Generate answer with confidence level
+                prompt = self._build_prompt(original_query, context, history, confidence)
+                llm_resp = self.bedrock.generate(prompt=prompt, model=self.claude_model)
+                answer = llm_resp.get('output') or llm_resp.get('answer') or str(llm_resp)
+                last_answer = answer
             
-            # Analyze citations in answer
-            citations = re.findall(r'\[(\d+)\]', answer)
+                # Analyze citations in answer
+                citations = re.findall(r'\[(\d+)\]', answer)
             unique_citations = sorted(set(int(c) for c in citations))
             print(f"[RAG] LLM generated answer with {len(unique_citations)} unique citations: {unique_citations}", file=sys.stderr)
             
@@ -298,17 +308,20 @@ Valid recommendation values: sufficient, expand_search, insufficient"""
                 unused_count = len(chunks_to_send) - len(unique_citations)
                 print(f"[RAG] Unused chunks: {unused_count} of {len(chunks_to_send)} sent to LLM", file=sys.stderr)
             
-            # Check if confidence meets threshold
-            if confidence >= rerank_threshold:
-                return {'answer': answer, 'sources': filtered_hits, 'meta': st.session_state['last_meta']}
-            
-            # Expand search if confidence low
-            if round_num < self.max_rounds:
-                top_k = min(top_k * 2, 100)
-                continue
+                # Check if confidence meets threshold
+                if confidence >= rerank_threshold:
+                    st.success(f"✅ High confidence answer generated (confidence: {confidence:.2f})")
+                    return {'answer': answer, 'sources': filtered_hits, 'meta': st.session_state['last_meta']}
+                
+                # Expand search if confidence low
+                if round_num < self.max_rounds:
+                    st.info(f"⚠️ Confidence {confidence:.2f} below threshold {rerank_threshold:.2f} - expanding search...")
+                    top_k = min(top_k * 2, 100)
+                    continue
         
         # Final answer with low confidence indicator
         print(f"[RAG] Answer generation complete: retrieved={len(last_hits)}, sent_to_llm={min(len(last_hits), 10)}, confidence={final_confidence:.2f}", file=sys.stderr)
+        st.warning(f"⚠️ Reached max iterations. Providing best available answer (confidence: {final_confidence:.2f})")
         return {'answer': last_answer, 'sources': last_hits, 'meta': st.session_state.get('last_meta', {})}
 
     def _build_prompt(self, user_query: str, context_text: str, history: List[Dict[str,str]], confidence: float = 1.0) -> str:
