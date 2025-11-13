@@ -32,15 +32,17 @@ class RAGOpenSearch:
 
 User Query: {query}
 
-Return ONLY valid JSON with these fields. Do NOT extract topic."""
+Return ONLY a valid JSON object (no extra text). Use null for unspecified fields."""
         
         print(f"[RAG] Analyzing query: {query}", file=sys.stderr)
         
         try:
             response = self.bedrock.generate(prompt=prompt, model=self.claude_model)
             result_text = response.get('output', '{}')
-            # Extract JSON from response
-            json_match = re.search(r'\{[^}]+\}', result_text, re.DOTALL)
+            print(f"[RAG] Query analysis raw response: {result_text[:200]}", file=sys.stderr)
+            
+            # Extract JSON with nested braces support
+            json_match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', result_text, re.DOTALL)
             if json_match:
                 metadata = json.loads(json_match.group(0))
                 print(f"[RAG] Extracted metadata: {metadata}", file=sys.stderr)
@@ -119,21 +121,50 @@ Evaluate each chunk:
 2. If user specified section_type, heavily weight matching chunks (+0.2), penalize nulls (-0.1)
 3. Information quality
 
-Return ONLY valid JSON:
+Return ONLY a valid JSON object with exactly this format (no extra text):
 {{
-  "overall_confidence": 0.0-1.0,
-  "recommendation": "sufficient" or "expand_search" or "insufficient"
-}}"""
+  "overall_confidence": 0.75,
+  "recommendation": "sufficient"
+}}
+
+Valid recommendation values: "sufficient", "expand_search", "insufficient""""
         
         try:
             response = self.bedrock.generate(prompt=prompt, model=self.claude_model)
             result_text = response.get('output', '{}')
-            json_match = re.search(r'\{[^}]+\}', result_text, re.DOTALL)
+            print(f"[RAG] Relevance scoring raw response: {result_text[:200]}", file=sys.stderr)
+            
+            # Try multiple JSON extraction methods
+            parsed = None
+            
+            # Method 1: Find JSON object with nested braces
+            json_match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', result_text, re.DOTALL)
             if json_match:
-                return json.loads(json_match.group(0))
+                try:
+                    parsed = json.loads(json_match.group(0))
+                except:
+                    pass
+            
+            # Method 2: Extract just the values if JSON parsing fails
+            if not parsed:
+                confidence_match = re.search(r'"overall_confidence"\s*:\s*([0-9.]+)', result_text)
+                recommendation_match = re.search(r'"recommendation"\s*:\s*"(\w+)"', result_text)
+                if confidence_match:
+                    parsed = {
+                        'overall_confidence': float(confidence_match.group(1)),
+                        'recommendation': recommendation_match.group(1) if recommendation_match else 'sufficient'
+                    }
+            
+            if parsed:
+                print(f"[RAG] Parsed relevance score: confidence={parsed.get('overall_confidence')}, recommendation={parsed.get('recommendation')}", file=sys.stderr)
+                return parsed
+                
         except Exception as e:
+            print(f"[RAG] Relevance scoring failed: {e}", file=sys.stderr)
             st.warning(f"Relevance scoring failed: {e}")
         
+        # Fallback: assume medium confidence
+        print(f"[RAG] Using fallback relevance score", file=sys.stderr)
         return {'overall_confidence': 0.5, 'recommendation': 'sufficient'}
 
     def answer(self, query: str, top_k: int =5, rerank_threshold: float=0.65, history: List[Dict[str,str]]=None) -> Dict[str,Any]:
