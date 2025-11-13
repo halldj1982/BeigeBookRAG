@@ -100,7 +100,7 @@ Return ONLY a valid JSON object (no extra text). Use null for unspecified fields
         for i, chunk in enumerate(chunks[:10]):
             chunk_texts.append(
                 f"[{i+1}] Source: {chunk.get('source', 'unknown')}, District: {chunk.get('district', 'N/A')}, "
-                f"Section: {chunk.get('section_type', 'N/A')}\nText: {chunk.get('text', '')[:500]}..."
+                f"Section: {chunk.get('section_type', 'N/A')}\nText: {chunk.get('text', '')[:500]}"
             )
         
         prompt = f"""Evaluate document relevance for a RAG system.
@@ -127,7 +127,7 @@ Return ONLY a valid JSON object with exactly this format (no extra text):
   "recommendation": "sufficient"
 }}
 
-Valid recommendation values: "sufficient", "expand_search", "insufficient""""
+Valid recommendation values: sufficient, expand_search, insufficient"""
         
         try:
             response = self.bedrock.generate(prompt=prompt, model=self.claude_model)
