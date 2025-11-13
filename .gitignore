@@ -5,3 +5,4 @@ __pycache__/
 secrets.toml
 terraform/
 *.zip
+update-app.sh
