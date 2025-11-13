@@ -231,82 +231,82 @@ Valid recommendation values: sufficient, expand_search, insufficient"""
                 # Assemble context with consistent reference format
                 st.spinner(f"✍️ Generating answer from {min(len(filtered_hits), 10)} sources...")
                 chunks_to_send = filtered_hits[:10]
-            print(f"[RAG] Assembling context from {len(filtered_hits)} chunks (limiting to {len(chunks_to_send)} for LLM)", file=sys.stderr)
-            
-            # Count chunks by date
-            date_counts = {}
-            for h in chunks_to_send:
-                yyyymm = self._extract_yyyymm_from_source(h.get('source', ''))
-                if yyyymm:
-                    date_counts[yyyymm] = date_counts.get(yyyymm, 0) + 1
-            
-            if date_counts:
-                date_breakdown = ", ".join([f"{count} from {yyyymm}" for yyyymm, count in sorted(date_counts.items())])
-                print(f"[RAG] Context breakdown: {date_breakdown}", file=sys.stderr)
-            
-            context_parts = []
-            print(f"[RAG] Context chunks:", file=sys.stderr)
-            for i, h in enumerate(chunks_to_send):
-                # Extract YYYYMM from source filename
-                source = h.get('source', 'unknown')
-                yyyymm = self._extract_yyyymm_from_source(source)
+                print(f"[RAG] Assembling context from {len(filtered_hits)} chunks (limiting to {len(chunks_to_send)} for LLM)", file=sys.stderr)
                 
-                # Format: Beige Book (Month YYYY) - District - Section
-                ref_parts = []
-                if yyyymm:
-                    month_year = f"{yyyymm[4:6]}/{yyyymm[:4]}"  # MM/YYYY
-                    ref_parts.append(f"Beige Book ({month_year})")
-                else:
-                    ref_parts.append("Beige Book")
+                # Count chunks by date
+                date_counts = {}
+                for h in chunks_to_send:
+                    yyyymm = self._extract_yyyymm_from_source(h.get('source', ''))
+                    if yyyymm:
+                        date_counts[yyyymm] = date_counts.get(yyyymm, 0) + 1
                 
-                if h.get('district'):
-                    ref_parts.append(h['district'])
+                if date_counts:
+                    date_breakdown = ", ".join([f"{count} from {yyyymm}" for yyyymm, count in sorted(date_counts.items())])
+                    print(f"[RAG] Context breakdown: {date_breakdown}", file=sys.stderr)
                 
-                if h.get('heading'):
-                    ref_parts.append(h['heading'])
-                elif h.get('section_type'):
-                    ref_parts.append(h['section_type'].replace('_', ' ').title())
+                context_parts = []
+                print(f"[RAG] Context chunks:", file=sys.stderr)
+                for i, h in enumerate(chunks_to_send):
+                    # Extract YYYYMM from source filename
+                    source = h.get('source', 'unknown')
+                    yyyymm = self._extract_yyyymm_from_source(source)
+                    
+                    # Format: Beige Book (Month YYYY) - District - Section
+                    ref_parts = []
+                    if yyyymm:
+                        month_year = f"{yyyymm[4:6]}/{yyyymm[:4]}"  # MM/YYYY
+                        ref_parts.append(f"Beige Book ({month_year})")
+                    else:
+                        ref_parts.append("Beige Book")
+                    
+                    if h.get('district'):
+                        ref_parts.append(h['district'])
+                    
+                    if h.get('heading'):
+                        ref_parts.append(h['heading'])
+                    elif h.get('section_type'):
+                        ref_parts.append(h['section_type'].replace('_', ' ').title())
+                    
+                    ref_str = " - ".join(ref_parts)
+                    print(f"[RAG]   [{i+1}] {ref_str} (score: {h.get('score', 0):.2f})", file=sys.stderr)
+                    context_parts.append(f"[{i+1}] {ref_str}\n{h['text'][:2000]}")
+                context = "\n\n".join(context_parts)
                 
-                ref_str = " - ".join(ref_parts)
-                print(f"[RAG]   [{i+1}] {ref_str} (score: {h.get('score', 0):.2f})", file=sys.stderr)
-                context_parts.append(f"[{i+1}] {ref_str}\n{h['text'][:2000]}")
-            context = "\n\n".join(context_parts)
-            
                 # Generate answer with confidence level
                 prompt = self._build_prompt(original_query, context, history, confidence)
                 llm_resp = self.bedrock.generate(prompt=prompt, model=self.claude_model)
                 answer = llm_resp.get('output') or llm_resp.get('answer') or str(llm_resp)
                 last_answer = answer
-            
+                
                 # Analyze citations in answer
                 citations = re.findall(r'\[(\d+)\]', answer)
-            unique_citations = sorted(set(int(c) for c in citations))
-            print(f"[RAG] LLM generated answer with {len(unique_citations)} unique citations: {unique_citations}", file=sys.stderr)
-            
-            # Analyze which dates were cited
-            if unique_citations:
-                cited_dates = {}
-                for cite_num in unique_citations:
-                    if cite_num <= len(chunks_to_send):
-                        chunk = chunks_to_send[cite_num - 1]
-                        yyyymm = self._extract_yyyymm_from_source(chunk.get('source', ''))
-                        if yyyymm:
-                            cited_dates[yyyymm] = cited_dates.get(yyyymm, 0) + 1
+                unique_citations = sorted(set(int(c) for c in citations))
+                print(f"[RAG] LLM generated answer with {len(unique_citations)} unique citations: {unique_citations}", file=sys.stderr)
                 
-                if cited_dates:
-                    cited_breakdown = ", ".join([f"{count} from {yyyymm}" for yyyymm, count in sorted(cited_dates.items())])
-                    print(f"[RAG] Citations breakdown: {cited_breakdown}", file=sys.stderr)
+                # Analyze which dates were cited
+                if unique_citations:
+                    cited_dates = {}
+                    for cite_num in unique_citations:
+                        if cite_num <= len(chunks_to_send):
+                            chunk = chunks_to_send[cite_num - 1]
+                            yyyymm = self._extract_yyyymm_from_source(chunk.get('source', ''))
+                            if yyyymm:
+                                cited_dates[yyyymm] = cited_dates.get(yyyymm, 0) + 1
                     
-                    # Warning for imbalanced results
-                    requested_bb = query_metadata.get('requested_beigebook')
-                    if requested_bb and ',' in str(requested_bb):
-                        requested_dates = [bb.strip() for bb in requested_bb.split(',')]
-                        missing_dates = [d for d in requested_dates if d not in cited_dates]
-                        if missing_dates:
-                            print(f"[RAG] WARNING: User requested {requested_bb} but {','.join(missing_dates)} not cited in answer", file=sys.stderr)
-                
-                unused_count = len(chunks_to_send) - len(unique_citations)
-                print(f"[RAG] Unused chunks: {unused_count} of {len(chunks_to_send)} sent to LLM", file=sys.stderr)
+                    if cited_dates:
+                        cited_breakdown = ", ".join([f"{count} from {yyyymm}" for yyyymm, count in sorted(cited_dates.items())])
+                        print(f"[RAG] Citations breakdown: {cited_breakdown}", file=sys.stderr)
+                        
+                        # Warning for imbalanced results
+                        requested_bb = query_metadata.get('requested_beigebook')
+                        if requested_bb and ',' in str(requested_bb):
+                            requested_dates = [bb.strip() for bb in requested_bb.split(',')]
+                            missing_dates = [d for d in requested_dates if d not in cited_dates]
+                            if missing_dates:
+                                print(f"[RAG] WARNING: User requested {requested_bb} but {','.join(missing_dates)} not cited in answer", file=sys.stderr)
+                    
+                    unused_count = len(chunks_to_send) - len(unique_citations)
+                    print(f"[RAG] Unused chunks: {unused_count} of {len(chunks_to_send)} sent to LLM", file=sys.stderr)
             
                 # Check if confidence meets threshold
                 if confidence >= rerank_threshold:
